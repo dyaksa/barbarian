@@ -5,18 +5,34 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+
+	"github.com/dyaksa/barbarian"
 )
 
-type RequestOption func(*http.Request) error
-
-func WithAuthorization(key, value string) RequestOption {
+func WithHeaders(headers map[string]string) barbarian.RequestOption {
 	return func(req *http.Request) error {
-		req.Header.Set(key, value)
+		for key, value := range headers {
+			req.Header.Set(key, value)
+		}
 		return nil
 	}
 }
 
-func BodyJSON(body interface{}) RequestOption {
+func WithBasicAuth(username, password string) barbarian.RequestOption {
+	return func(req *http.Request) error {
+		req.SetBasicAuth(username, password)
+		return nil
+	}
+}
+
+func WithBearerToken(token string) barbarian.RequestOption {
+	return func(req *http.Request) error {
+		req.Header.Set("Authorization", "Bearer "+token)
+		return nil
+	}
+}
+
+func BodyJSON(body interface{}) barbarian.RequestOption {
 	return func(r *http.Request) error {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {

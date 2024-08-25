@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/dyaksa/barbarian"
 )
 
 type State int
@@ -90,6 +92,8 @@ type CircuitBreaker struct {
 	counts     Counts
 	expiry     time.Time
 }
+
+var _ barbarian.CircuitBreaker = (*CircuitBreaker)(nil)
 
 func NewCircuitBreaker(st Settings) *CircuitBreaker {
 	cb := new(CircuitBreaker)
