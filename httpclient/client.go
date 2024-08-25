@@ -14,6 +14,8 @@ import (
 type Config struct {
 	BaseUrl string
 
+	HTTPTimeout time.Duration
+
 	Name          string
 	MaxRequests   uint32
 	Interval      time.Duration
@@ -41,6 +43,10 @@ func NewClient(config *Config) (c *Client) {
 		baseUrl:                      config.BaseUrl,
 		considerServerErrorAsFailure: config.ConsiderServerErrorAsFailure,
 		serverErrorThreshold:         config.ServerErrorThreshold,
+	}
+
+	if config.HTTPTimeout != 0 {
+		c.httpClient.Timeout = config.HTTPTimeout
 	}
 
 	c.breaker = NewCircuitBreaker(Settings{

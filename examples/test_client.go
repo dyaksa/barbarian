@@ -14,17 +14,9 @@ import (
 
 func main() {
 	client := httpclient.NewClient(&httpclient.Config{
-		Name:                         "test",
-		BaseUrl:                      "http://localhost:3001",
-		ConsiderServerErrorAsFailure: true,
-		ServerErrorThreshold:         500,
-		Timeout:                      30 * time.Second,
-		OnStateChange: func(name string, to, from httpclient.State) {
-			fmt.Printf("State change from %s to %s\n", from, to)
-		},
-		ReadyToTrip: func(cunts httpclient.Counts) bool {
-			return cunts.TotalFailures >= 2
-		},
+		Name:    "test",
+		BaseUrl: "http://localhost:3001",
+		Timeout: 30 * time.Second,
 	})
 
 	logger := plugins.NewLogger(nil, nil)
