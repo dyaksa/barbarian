@@ -14,12 +14,18 @@ import (
 
 func main() {
 	client := httpclient.NewClient(&httpclient.Config{
-		Name:    "test",
-		BaseUrl: "http://localhost:3001",
+		Name:                         "test",
+		BaseUrl:                      "http://localhost:3001",
+		ConsiderServerErrorAsFailure: true,
+		ServerErrorThreshold:         500,
+		ReadyToTrip: func(cunts httpclient.Counts) bool {
+			return cunts.TotalFailures > 2
+		},
 		Timeout: 30 * time.Second,
 	})
 
 	logger := plugins.NewLogger(nil, nil)
+
 	client.AddPlugin(logger)
 
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {

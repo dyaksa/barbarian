@@ -20,7 +20,7 @@ type Config struct {
 	MaxRequests   uint32
 	Interval      time.Duration
 	Timeout       time.Duration
-	ReadyToTrip   func(cunts Counts) bool
+	ReadyToTrip   func(counts Counts) bool
 	OnStateChange func(name string, to State, from State)
 
 	ConsiderServerErrorAsFailure bool
