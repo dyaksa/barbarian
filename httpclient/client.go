@@ -127,11 +127,29 @@ func (c *Client) AddPlugin(plugins ...barbarian.Plugins) {
 }
 
 func (c *Client) Do(req *http.Request) (res *http.Response, err error) {
-	var options []barbarian.RequestOption
-	if req.Body != nil {
-		options = append(options, BodyJSON(req.Body))
+	resp, err := c.breaker.Execute(func() (interface{}, error) {
+		c.reportRequest(req)
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			c.reportError(req, err)
+			return resp, err
+		}
+
+		if c.considerServerErrorAsFailure && resp.StatusCode >= c.serverErrorThreshold {
+			c.reportError(req, fmt.Errorf("response status code: %d", resp.StatusCode))
+			return resp, fmt.Errorf("server error: %d", resp.StatusCode)
+		}
+
+		c.reportResponse(req, resp)
+		return resp, nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
-	return c.executeRequest(req.Context(), req.Method, req.URL.String(), options...)
+
+	return resp.(*http.Response), nil
 }
 
 func (c *Client) Get(ctx context.Context, path string, options ...barbarian.RequestOption) (res *http.Response, err error) {
