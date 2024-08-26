@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -61,18 +60,12 @@ func main() {
 }
 
 func fetch(client *httpclient.Client) (*http.Response, error) {
-	// req, err := http.NewRequest("GET", "http://localhost:3001/test", nil)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	headers := map[string]string{
-		"Content-Type":  "application/json",
-		"Authorization": "bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+	req, err := http.NewRequest("GET", "http://localhost:3001/test", nil)
+	if err != nil {
+		return nil, err
 	}
 
-	return client.Get(context.Background(), "/test",
-		httpclient.WithHeaders(headers),
-		httpclient.BodyJSON(map[string]interface{}{"name": "Dyaksa"}),
-	)
+	req.Header.Set("Authorization", "apiKey 123456")
+
+	return client.Do(req)
 }
