@@ -127,7 +127,15 @@ func (c *Client) executeRequest(ctx context.Context, method, url string, options
 	})
 
 	if err != nil {
-		return nil, err
+		resp, errFallback := c.fallback()
+		if errFallback != nil {
+			return nil, errors.Wrap(err, "failed to execute request")
+		}
+
+		if resp == nil {
+			return nil, errors.Wrap(err, "failed to execute request")
+		}
+		return resp, nil
 	}
 
 	return resp.(*http.Response), nil
@@ -161,7 +169,15 @@ func (c *Client) Do(req *http.Request) (res *http.Response, err error) {
 	})
 
 	if err != nil {
-		return nil, err
+		resp, errFallback := c.fallback()
+		if errFallback != nil {
+			return nil, errors.Wrap(err, "failed to execute request")
+		}
+
+		if resp == nil {
+			return nil, errors.Wrap(err, "failed to execute request")
+		}
+		return resp, nil
 	}
 
 	return resp.(*http.Response), nil
