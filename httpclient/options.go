@@ -4,10 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/url"
 
 	"github.com/dyaksa/barbarian"
 )
+
+type File struct {
+	Name      string
+	ParamName string
+	Reader    io.Reader
+}
 
 func WithHeaders(headers map[string]string) barbarian.RequestOption {
 	return func(req *http.Request) error {
@@ -40,6 +48,62 @@ func BodyJSON(body interface{}) barbarian.RequestOption {
 		}
 
 		r.Body = io.NopCloser(bytes.NewBuffer(jsonBody))
+		return nil
+	}
+}
+
+func SetFileReader(param, fileName string, fileReader io.Reader) barbarian.RequestOption {
+	return func(r *http.Request) error {
+		var multipartFiles []*File
+		multipartFiles = append(multipartFiles, &File{
+			Name:      fileName,
+			ParamName: param,
+			Reader:    fileReader,
+		})
+
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+		for _, file := range multipartFiles {
+			part, err := writer.CreateFormFile(file.ParamName, file.Name)
+			if err != nil {
+				return err
+			}
+
+			if _, err := io.Copy(part, file.Reader); err != nil {
+				return err
+			}
+		}
+
+		if err := writer.Close(); err != nil {
+			return err
+		}
+
+		r.Body = io.NopCloser(body)
+		r.Header.Set("Content-Type", writer.FormDataContentType())
+		return nil
+	}
+}
+
+func SetFile(param, filePath string) barbarian.RequestOption {
+	return func(r *http.Request) error {
+		var formData url.Values
+		formData.Set("@"+param, filePath)
+
+		r.Body = io.NopCloser(bytes.NewBufferString(formData.Encode()))
+		r.Header.Set("Content-Type", "multipart/form-data")
+		return nil
+	}
+}
+
+func SetFormData(data map[string]string) barbarian.RequestOption {
+	return func(r *http.Request) error {
+		var formData url.Values
+		for key, value := range data {
+			formData.Set(key, value)
+		}
+
+		r.Body = io.NopCloser(bytes.NewBufferString(formData.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		return nil
 	}
 }
