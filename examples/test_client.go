@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,7 +16,7 @@ import (
 func main() {
 	client := httpclient.NewClient(&httpclient.Config{
 		Name:                         "test",
-		BaseUrl:                      "http://localhost:3001",
+		BaseUrl:                      "https://webhook.site",
 		ConsiderServerErrorAsFailure: true,
 		ServerErrorThreshold:         500,
 		ReadyToTrip: func(cunts httpclient.Counts) bool {
@@ -24,8 +26,30 @@ func main() {
 	})
 
 	logger := plugins.NewLogger(nil, nil)
-
 	client.AddPlugin(logger)
+
+	client.Fallback(func() (*http.Response, error) {
+		httpClient := &http.Client{}
+		payload, err := json.Marshal(map[string]string{"nama": "John Doe"})
+		if err != nil {
+			return nil, err
+		}
+		req, err := http.NewRequest(http.MethodGet, "https://webhook.site/339df973-287a-4cf1-b1b0-c79913986ad8", bytes.NewBuffer(payload))
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("error status code %d ", resp.StatusCode)
+		}
+
+		return resp, nil
+	})
 
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		resp, err := fetch(client)
@@ -60,12 +84,12 @@ func main() {
 }
 
 func fetch(client *httpclient.Client) (*http.Response, error) {
-	req, err := http.NewRequest("GET", "http://localhost:3001/test", nil)
-	if err != nil {
-		return nil, err
+	headers := map[string]string{
+		"Content-Type": "application/json",
+		"User-Agent":   "barbarian",
 	}
-
-	req.Header.Set("Authorization", "apiKey 123456")
-
-	return client.Do(req)
+	return client.Get(context.Background(), "/fb2778ed-5588-429e-bc0c-094c0cd5984d",
+		httpclient.WithHeaders(headers),
+		httpclient.BodyJSON(map[string]interface{}{"name": "John Doe"}),
+	)
 }
