@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dyaksa/barbarian"
+	"github.com/pkg/errors"
 )
 
 type Config struct {
@@ -35,6 +36,8 @@ type Client struct {
 	considerServerErrorAsFailure bool
 	serverErrorThreshold         int
 	plugins                      []barbarian.Plugins
+
+	fallback func() (*http.Response, error)
 }
 
 func NewClient(config *Config) (c *Client) {
@@ -47,6 +50,10 @@ func NewClient(config *Config) (c *Client) {
 
 	if config.HTTPTimeout != 0 {
 		c.httpClient.Timeout = config.HTTPTimeout
+	}
+
+	if c.fallback == nil {
+		c.fallback = defaultFallback
 	}
 
 	c.breaker = NewCircuitBreaker(Settings{
@@ -66,6 +73,10 @@ func createHTTPClient() *http.Client {
 		Transport: createHTTPTransport(),
 		Timeout:   30 * time.Second,
 	}
+}
+
+func defaultFallback() (resp *http.Response, err error) {
+	return resp, nil
 }
 
 func createHTTPTransport() *http.Transport {
@@ -89,21 +100,21 @@ func (c *Client) executeRequest(ctx context.Context, method, url string, options
 	resp, err := c.breaker.Execute(func() (interface{}, error) {
 		req, err := http.NewRequestWithContext(ctx, method, url, nil)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "failed to create request")
 		}
 
 		c.reportRequest(req)
 
 		for _, option := range options {
 			if err := option(req); err != nil {
-				return nil, err
+				return nil, errors.Wrap(err, "failed to apply request option")
 			}
 		}
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			c.reportError(req, err)
-			return resp, err
+			return resp, errors.Wrap(err, "failed to execute request")
 		}
 
 		if c.considerServerErrorAsFailure && resp.StatusCode >= c.serverErrorThreshold {
@@ -126,6 +137,10 @@ func (c *Client) AddPlugin(plugins ...barbarian.Plugins) {
 	c.plugins = append(c.plugins, plugins...)
 }
 
+func (c *Client) Fallback(f func() (*http.Response, error)) {
+	c.fallback = f
+}
+
 func (c *Client) Do(req *http.Request) (res *http.Response, err error) {
 	resp, err := c.breaker.Execute(func() (interface{}, error) {
 		c.reportRequest(req)
@@ -133,11 +148,11 @@ func (c *Client) Do(req *http.Request) (res *http.Response, err error) {
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			c.reportError(req, err)
-			return resp, err
+			return resp, errors.Wrap(err, "failed to execute request")
 		}
 
 		if c.considerServerErrorAsFailure && resp.StatusCode >= c.serverErrorThreshold {
-			c.reportError(req, fmt.Errorf("response status code: %d", resp.StatusCode))
+			c.reportError(req, fmt.Errorf("server error: %d", resp.StatusCode))
 			return resp, fmt.Errorf("server error: %d", resp.StatusCode)
 		}
 

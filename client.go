@@ -15,4 +15,5 @@ type Client interface {
 	Patch(ctx context.Context, path string, options ...RequestOption) (res *http.Response, err error)
 	Delete(ctx context.Context, path string, options ...RequestOption) (res *http.Response, err error)
 	AddPlugin(plugins ...Plugins)
+	Fallback(f func() (*http.Response, error))
 }
