@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 
@@ -48,38 +47,6 @@ func BodyJSON(body interface{}) barbarian.RequestOption {
 		}
 
 		r.Body = io.NopCloser(bytes.NewBuffer(jsonBody))
-		return nil
-	}
-}
-
-func SetFileReader(param, fileName string, fileReader io.Reader) barbarian.RequestOption {
-	return func(r *http.Request) error {
-		var multipartFiles []*File
-		multipartFiles = append(multipartFiles, &File{
-			Name:      fileName,
-			ParamName: param,
-			Reader:    fileReader,
-		})
-
-		body := &bytes.Buffer{}
-		writer := multipart.NewWriter(body)
-		for _, file := range multipartFiles {
-			part, err := writer.CreateFormFile(file.ParamName, file.Name)
-			if err != nil {
-				return err
-			}
-
-			if _, err := io.Copy(part, file.Reader); err != nil {
-				return err
-			}
-		}
-
-		if err := writer.Close(); err != nil {
-			return err
-		}
-
-		r.Body = io.NopCloser(body)
-		r.Header.Set("Content-Type", writer.FormDataContentType())
 		return nil
 	}
 }
