@@ -28,7 +28,7 @@ func main() {
 	logger := plugins.NewLogger(nil, nil)
 	client.AddPlugin(logger)
 
-	client.Fallback(func() (*http.Response, error) {
+	client.FallbackFunc(func() (*http.Response, error) {
 		httpClient := &http.Client{}
 		payload, err := json.Marshal(map[string]string{"nama": "John Doe"})
 		if err != nil {

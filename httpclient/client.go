@@ -145,7 +145,7 @@ func (c *Client) AddPlugin(plugins ...barbarian.Plugins) {
 	c.plugins = append(c.plugins, plugins...)
 }
 
-func (c *Client) Fallback(f func() (*http.Response, error)) {
+func (c *Client) FallbackFunc(f func() (*http.Response, error)) {
 	c.fallback = f
 }
 
