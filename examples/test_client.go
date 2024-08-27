@@ -27,6 +27,16 @@ func main() {
 
 	client.AddPlugin(logger)
 
+	client.Fallback(func() (*http.Response, error) {
+		httpClient := &http.Client{}
+		req, err := http.NewRequest(http.MethodGet, "http://localhost:3001/fallback", nil)
+		if err != nil {
+			return nil, err
+		}
+
+		return httpClient.Do(req)
+	})
+
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		resp, err := fetch(client)
 		if err != nil {
