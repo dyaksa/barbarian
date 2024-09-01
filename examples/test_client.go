@@ -18,6 +18,7 @@ func main() {
 		BaseUrl:                      "https://webhook.site",
 		ConsiderServerErrorAsFailure: true,
 		ServerErrorThreshold:         500,
+		RetryCount:                   5,
 		ReadyToTrip: func(cunts httpclient.Counts) bool {
 			return cunts.TotalFailures > 2
 		},
