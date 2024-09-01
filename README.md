@@ -180,12 +180,31 @@ A plugin is an interface whose methods get called during key events in a request
 - `OnRequestStart` is called just before the request is made
 - `OnRequestEnd` is called once the request has successfully executed
 - `OnError` is called is the request failed
+- `NextInterval` is called the request retry mechanism
 
 Each method is called with the request object as an argument, with `OnRequestEnd`, and `OnError` additionally being called with the response and error instances respectively.
-For a simple example on how to write plugins, look at the [logger plugin](/plugins/logger.go).
+
+### Creating an HTTP client with a plugin retry mechanism
+
+```go
+client := httpclient.NewClient(&httpclient.Config{
+	Name:                         	"test",
+	BaseUrl:                      	"https://webhook.site",
+	ConsiderServerErrorAsFailure: 	true,
+	ServerErrorThreshold:         	500,
+	RetryCount:						5
+})
+
+// Create a new retry mechanism with the backoff
+retrier := plugins.NewRetrier(plugins.NewConstantBackoff(1*time.Second, 1))
+// Create a new client, sets the retry mechanism, and the number of times you would like to retry
+client.AddPlugin(retrier)
+
+```
 
 ## License
 
+```
 Copyright 2024
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -199,3 +218,4 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+```
