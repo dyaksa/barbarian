@@ -188,11 +188,15 @@ Each method is called with the request object as an argument, with `OnRequestEnd
 
 ```go
 client := httpclient.NewClient(&httpclient.Config{
-	Name:                         	"test",
-	BaseUrl:                      	"https://webhook.site",
-	ConsiderServerErrorAsFailure: 	true,
-	ServerErrorThreshold:         	500,
-	RetryCount:						5
+	Name:                         "test",
+	BaseUrl:                      "https://webhook.site",
+	ConsiderServerErrorAsFailure: true,
+	ServerErrorThreshold:         500,
+	RetryCount:                   5,
+	ReadyToTrip: func(cunts httpclient.Counts) bool {
+		return cunts.TotalFailures > 2
+	},
+	Timeout: 30 * time.Second,
 })
 
 // Create a new retry mechanism with the backoff
