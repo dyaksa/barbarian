@@ -20,7 +20,7 @@ type logger struct {
 	errOut io.Writer
 }
 
-func NewLogger(out io.Writer, errOut io.Writer) barbarian.Plugins {
+func NewLogger(out io.Writer, errOut io.Writer) barbarian.LoggerPlugins {
 	if out == nil {
 		out = os.Stdout
 	}
@@ -33,6 +33,10 @@ func NewLogger(out io.Writer, errOut io.Writer) barbarian.Plugins {
 		out:    out,
 		errOut: errOut,
 	}
+}
+
+func (l *logger) Type() string {
+	return "logger"
 }
 
 func (l *logger) OnRequestStart(req *http.Request) {

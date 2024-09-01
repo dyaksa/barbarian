@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +26,9 @@ func main() {
 
 	logger := plugins.NewLogger(nil, nil)
 	client.AddPlugin(logger)
+
+	// retrier := plugins.NewRetrier(plugins.NewConstantBackoff(1*time.Second, 1))
+	// client.AddPlugin(retrier)
 
 	client.FallbackFunc(func() (*http.Response, error) {
 		httpClient := &http.Client{}
@@ -79,17 +81,13 @@ func main() {
 	if err := http.ListenAndServe(":9000", nil); err != nil {
 		fmt.Println("Error:", err)
 	}
-
-	fmt.Println("Server started at :8000")
 }
 
 func fetch(client *httpclient.Client) (*http.Response, error) {
-	headers := map[string]string{
-		"Content-Type": "application/json",
-		"User-Agent":   "barbarian",
+	req, err := http.NewRequest(http.MethodGet, "http://localhost:3001/test", nil)
+	if err != nil {
+		return nil, err
 	}
-	return client.Get(context.Background(), "/fb2778ed-5588-429e-bc0c-094c0cd5984d",
-		httpclient.WithHeaders(headers),
-		httpclient.BodyJSON(map[string]interface{}{"name": "John Doe"}),
-	)
+
+	return client.Do(req)
 }

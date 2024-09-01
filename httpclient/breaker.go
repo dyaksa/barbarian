@@ -167,6 +167,10 @@ func (cb *CircuitBreaker) Counts() Counts {
 	return cb.counts
 }
 
+func (c *CircuitBreaker) IsCircuitBreakerOpen() bool {
+	return c.State() == StateOpen
+}
+
 func (cb *CircuitBreaker) Execute(req func() (interface{}, error)) (interface{}, error) {
 	generation, err := cb.beforeRequest()
 	if err != nil {

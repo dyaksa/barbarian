@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"time"
 
 	"github.com/dyaksa/barbarian"
+	"github.com/dyaksa/barbarian/plugins"
 	"github.com/pkg/errors"
 )
+
+type Options func(*Client)
 
 type Config struct {
 	BaseUrl string
@@ -26,6 +30,8 @@ type Config struct {
 
 	ConsiderServerErrorAsFailure bool
 	ServerErrorThreshold         int
+
+	RetryCount int
 }
 
 type Client struct {
@@ -35,14 +41,20 @@ type Client struct {
 	baseUrl                      string
 	considerServerErrorAsFailure bool
 	serverErrorThreshold         int
-	plugins                      []barbarian.Plugins
+	plugins                      map[string][]barbarian.Plugin
 
 	fallback func() (*http.Response, error)
+
+	retrier    plugins.Retriable
+	retryCount int
 }
 
 func NewClient(config *Config) (c *Client) {
 	c = &Client{
 		httpClient:                   createHTTPClient(),
+		plugins:                      make(map[string][]barbarian.Plugin),
+		retrier:                      plugins.NewNoRetrier(),
+		retryCount:                   config.RetryCount - 1,
 		baseUrl:                      config.BaseUrl,
 		considerServerErrorAsFailure: config.ConsiderServerErrorAsFailure,
 		serverErrorThreshold:         config.ServerErrorThreshold,
@@ -54,6 +66,10 @@ func NewClient(config *Config) (c *Client) {
 
 	if c.fallback == nil {
 		c.fallback = defaultFallback
+	}
+
+	if c.retryCount <= 0 {
+		c.retryCount = 0
 	}
 
 	c.breaker = NewCircuitBreaker(Settings{
@@ -141,8 +157,9 @@ func (c *Client) executeRequest(ctx context.Context, method, url string, options
 	return resp.(*http.Response), nil
 }
 
-func (c *Client) AddPlugin(plugins ...barbarian.Plugins) {
-	c.plugins = append(c.plugins, plugins...)
+func (c *Client) AddPlugin(plugin barbarian.Plugin) {
+	pluginType := plugin.Type()
+	c.plugins[pluginType] = append(c.plugins[pluginType], plugin)
 }
 
 func (c *Client) FallbackFunc(f func() (*http.Response, error)) {
@@ -150,36 +167,71 @@ func (c *Client) FallbackFunc(f func() (*http.Response, error)) {
 }
 
 func (c *Client) Do(req *http.Request) (res *http.Response, err error) {
-	resp, err := c.breaker.Execute(func() (interface{}, error) {
-		c.reportRequest(req)
+	c.setRetrier()
+	var bodyReader *bytes.Reader
+	var resp interface{}
+	multiError := &MultiError{}
 
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			c.reportError(req, err)
-			return resp, errors.Wrap(err, "failed to execute request")
+	resp, err = c.breaker.Execute(func() (interface{}, error) {
+		if req.Body != nil {
+			reqData, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, errors.Wrap(err, "io.ReadAll failed")
+			}
+
+			bodyReader = bytes.NewReader(reqData)
+			req.Body = io.NopCloser(bodyReader)
 		}
 
-		if c.considerServerErrorAsFailure && resp.StatusCode >= c.serverErrorThreshold {
-			c.reportError(req, fmt.Errorf("server error: %d", resp.StatusCode))
-			return resp, fmt.Errorf("server error: %d", resp.StatusCode)
+		if c.breaker.IsCircuitBreakerOpen() {
+			return nil, errors.Wrap(errors.New("circuit breaker is open"), "circuit breaker")
 		}
 
-		c.reportResponse(req, resp)
-		return resp, nil
+		for i := 0; i <= c.retryCount; i++ {
+			c.reportRequest(req)
+
+			resp, err := c.httpClient.Do(req)
+
+			if bodyReader != nil {
+				_, _ = bodyReader.Seek(0, 0)
+			}
+
+			if err != nil {
+				c.reportError(req, err)
+				multiError.Push(err.Error())
+				backoffTime := c.retrier.NextInterval(i)
+				time.Sleep(backoffTime)
+				continue
+			}
+
+			c.reportResponse(req, resp)
+
+			if c.considerServerErrorAsFailure && resp.StatusCode >= c.serverErrorThreshold {
+				multiError.Push(fmt.Sprintf("server error: %d", resp.StatusCode))
+				backoffTime := c.retrier.NextInterval(i)
+				time.Sleep(backoffTime)
+				continue
+			}
+
+			multiError = &MultiError{}
+			break
+		}
+
+		return resp, multiError.HasError()
 	})
 
 	if err != nil {
 		resp, errFallback := c.fallback()
 		if errFallback != nil {
-			return nil, errors.Wrap(err, "failed to execute request")
+			return nil, errFallback
 		}
 
 		if resp == nil {
-			return nil, errors.Wrap(err, "failed to execute request")
+			return nil, err
 		}
+
 		return resp, nil
 	}
-
 	return resp.(*http.Response), nil
 }
 
@@ -219,19 +271,33 @@ func (c *Client) Delete(ctx context.Context, path string, options ...barbarian.R
 }
 
 func (c *Client) reportRequest(req *http.Request) {
-	for _, plugin := range c.plugins {
-		plugin.OnRequestStart(req)
+	for _, plugin := range c.plugins["logger"] {
+		if logger, ok := plugin.(barbarian.LoggerPlugins); ok {
+			logger.OnRequestStart(req)
+		}
 	}
 }
 
 func (c *Client) reportResponse(req *http.Request, res *http.Response) {
-	for _, plugin := range c.plugins {
-		plugin.OnRequestEnd(req, res)
+	for _, plugin := range c.plugins["logger"] {
+		if logger, ok := plugin.(barbarian.LoggerPlugins); ok {
+			logger.OnRequestEnd(req, res)
+		}
 	}
 }
 
 func (c *Client) reportError(req *http.Request, err error) {
-	for _, plugin := range c.plugins {
-		plugin.OnRequestError(req, err)
+	for _, plugin := range c.plugins["logger"] {
+		if logger, ok := plugin.(barbarian.LoggerPlugins); ok {
+			logger.OnRequestError(req, err)
+		}
+	}
+}
+
+func (c *Client) setRetrier() {
+	for _, plugin := range c.plugins["retrier"] {
+		if retrier, ok := plugin.(barbarian.RetryPlugins); ok {
+			c.retrier = retrier
+		}
 	}
 }
