@@ -190,7 +190,7 @@ func (c *Client) Do(req *http.Request) (res *http.Response, err error) {
 		for i := 0; i <= c.retryCount; i++ {
 			c.reportRequest(req)
 
-			resp, err := c.httpClient.Do(req)
+			resp, err = c.httpClient.Do(req)
 
 			if bodyReader != nil {
 				_, _ = bodyReader.Seek(0, 0)
@@ -204,10 +204,10 @@ func (c *Client) Do(req *http.Request) (res *http.Response, err error) {
 				continue
 			}
 
-			c.reportResponse(req, resp)
+			c.reportResponse(req, resp.(*http.Response))
 
-			if c.considerServerErrorAsFailure && resp.StatusCode >= c.serverErrorThreshold {
-				multiError.Push(fmt.Sprintf("server error: %d", resp.StatusCode))
+			if c.considerServerErrorAsFailure && resp.(*http.Response).StatusCode >= c.serverErrorThreshold {
+				multiError.Push(fmt.Sprintf("server error: %d", resp.(*http.Response).StatusCode))
 				backoffTime := c.retrier.NextInterval(i)
 				time.Sleep(backoffTime)
 				continue
@@ -232,6 +232,7 @@ func (c *Client) Do(req *http.Request) (res *http.Response, err error) {
 
 		return resp, nil
 	}
+
 	return resp.(*http.Response), nil
 }
 
