@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -28,31 +27,31 @@ func main() {
 	logger := plugins.NewLogger(nil, nil)
 	client.AddPlugin(logger)
 
-	// retrier := plugins.NewRetrier(plugins.NewConstantBackoff(1*time.Second, 1))
-	// client.AddPlugin(retrier)
+	retrier := plugins.NewRetrier(plugins.NewConstantBackoff(3*time.Second, 1))
+	client.AddPlugin(retrier)
 
-	client.FallbackFunc(func() (*http.Response, error) {
-		httpClient := &http.Client{}
-		payload, err := json.Marshal(map[string]string{"nama": "John Doe"})
-		if err != nil {
-			return nil, err
-		}
-		req, err := http.NewRequest(http.MethodGet, "https://webhook.site/339df973-287a-4cf1-b1b0-c79913986ad8", bytes.NewBuffer(payload))
-		if err != nil {
-			return nil, err
-		}
+	// client.FallbackFunc(func() (*http.Response, error) {
+	// 	httpClient := &http.Client{}
+	// 	payload, err := json.Marshal(map[string]string{"nama": "John Doe"})
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	req, err := http.NewRequest(http.MethodGet, "https://webhook.site/339df973-287a-4cf1-b1b0-c79913986ad8", bytes.NewBuffer(payload))
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
 
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
+	// 	resp, err := httpClient.Do(req)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
 
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("error status code %d ", resp.StatusCode)
-		}
+	// 	if resp.StatusCode != http.StatusOK {
+	// 		return nil, fmt.Errorf("error status code %d ", resp.StatusCode)
+	// 	}
 
-		return resp, nil
-	})
+	// 	return resp, nil
+	// })
 
 	http.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		resp, err := fetch(client)
