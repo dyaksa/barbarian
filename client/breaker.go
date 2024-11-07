@@ -35,6 +35,14 @@ func (s State) String() string {
 	}
 }
 
+var _ ICounts = &Counts{}
+
+type ICounts interface {
+	onRequest()
+	onSuccess()
+	onFailure()
+}
+
 type Counts struct {
 	Requests             uint32
 	TotalSuccesses       uint32
@@ -75,6 +83,24 @@ type Settings struct {
 	ReadyToTrip   func(counts Counts) bool
 	OnStateChange func(name string, from State, to State)
 	IsSuccessful  func(err error) bool
+}
+
+var _ ICircuitBreaker = &CircuitBreaker{}
+
+type ICircuitBreaker interface {
+	Name() string
+	State() State
+	Counts() Counts
+	IsCircuitBreakerOpen() bool
+	Execute(req func() (interface{}, error)) (interface{}, error)
+
+	beforeRequest() (uint64, error)
+	afterRequest(before uint64, success bool)
+	onSuccess(state State, now time.Time)
+	onFailure(state State, now time.Time)
+	currentState(now time.Time) (State, uint64)
+	setState(state State, now time.Time)
+	toNewGeneration(now time.Time)
 }
 
 type CircuitBreaker struct {

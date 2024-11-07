@@ -1,34 +1,33 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/dyaksa/barbarian"
 	"io"
 	"net/http"
 	"time"
 
-	"github.com/dyaksa/barbarian/httpclient"
-	"github.com/dyaksa/barbarian/plugins"
+	"github.com/dyaksa/barbarian/client"
 )
 
 func main() {
-	client := httpclient.NewClient(&httpclient.Config{
+	client := client.NewClient(&client.Config{
 		Name:                         "test",
-		BaseUrl:                      "https://webhook.site",
 		ConsiderServerErrorAsFailure: true,
 		ServerErrorThreshold:         500,
-		RetryCount:                   5,
-		ReadyToTrip: func(cunts httpclient.Counts) bool {
+		ReadyToTrip: func(cunts client.Counts) bool {
 			return cunts.TotalFailures > 2
 		},
 		Timeout: 30 * time.Second,
 	})
 
-	logger := plugins.NewLogger(nil, nil)
+	logger := barbarian.NewLogger(nil, nil)
 	client.AddPlugin(logger)
 
-	retrier := plugins.NewRetrier(plugins.NewConstantBackoff(3*time.Second, 1))
-	client.AddPlugin(retrier)
+	//retrier := plugins.NewRetrier(plugins.NewConstantBackoff(3*time.Second, 1))
+	//client.AddPlugin(retrier)
 
 	// client.FallbackFunc(func() (*http.Response, error) {
 	// 	httpClient := &http.Client{}
@@ -83,8 +82,24 @@ func main() {
 	}
 }
 
-func fetch(client *httpclient.Client) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, "http://localhost:3001/test", nil)
+type Body struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+func fetch(client *client.Client) (*http.Response, error) {
+
+	var body = Body{
+		Name:  "John Doe",
+		Email: "johndoe@gmail.com",
+	}
+
+	b, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, "https://webhook.site/e4381a42-1983-4884-bed4-1ca307685357", bytes.NewBuffer(b))
 	if err != nil {
 		return nil, err
 	}
