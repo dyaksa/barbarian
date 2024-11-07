@@ -1,4 +1,4 @@
-package plugins
+package barbarian
 
 import (
 	"math"

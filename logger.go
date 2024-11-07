@@ -1,4 +1,4 @@
-package plugins
+package barbarian
 
 import (
 	"context"
@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"os"
 	"time"
-
-	"github.com/dyaksa/barbarian"
 )
 
 type ctxKey string
@@ -20,7 +18,7 @@ type logger struct {
 	errOut io.Writer
 }
 
-func NewLogger(out io.Writer, errOut io.Writer) barbarian.LoggerPlugins {
+func NewLogger(out io.Writer, errOut io.Writer) LoggerPlugins {
 	if out == nil {
 		out = os.Stdout
 	}

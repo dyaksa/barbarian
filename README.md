@@ -17,7 +17,7 @@ go get -u github.com/dyaksa/barbarian
 This package can be used by adding the following import statement to your `.go` files.
 
 ```go
-import "github.com/dyaksa/barbarian/httpclient"
+import "github.com/dyaksa/barbarian/client"
 ```
 
 ### Making a simple `GET` request

@@ -1,9 +1,7 @@
-package plugins
+package barbarian
 
 import (
 	"time"
-
-	"github.com/dyaksa/barbarian"
 )
 
 type Retriable interface {
@@ -20,7 +18,7 @@ type retrier struct {
 	backoff Backoff
 }
 
-func NewRetrier(backoff Backoff) barbarian.Plugin {
+func NewRetrier(backoff Backoff) Plugin {
 	return &retrier{
 		backoff: backoff,
 	}

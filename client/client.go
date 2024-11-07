@@ -1,4 +1,4 @@
-package httpclient
+package client
 
 import (
 	"bytes"
@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/dyaksa/barbarian"
-	"github.com/dyaksa/barbarian/plugins"
 	"github.com/pkg/errors"
 )
 
@@ -45,7 +44,7 @@ type Client struct {
 
 	fallback func() (*http.Response, error)
 
-	retrier    plugins.Retriable
+	retrier    barbarian.Retriable
 	retryCount int
 }
 
@@ -53,7 +52,7 @@ func NewClient(config *Config) (c *Client) {
 	c = &Client{
 		httpClient:                   createHTTPClient(),
 		plugins:                      make(map[string][]barbarian.Plugin),
-		retrier:                      plugins.NewNoRetrier(),
+		retrier:                      barbarian.NewNoRetrier(),
 		retryCount:                   config.RetryCount - 1,
 		baseUrl:                      config.BaseUrl,
 		considerServerErrorAsFailure: config.ConsiderServerErrorAsFailure,
@@ -166,74 +165,105 @@ func (c *Client) FallbackFunc(f func() (*http.Response, error)) {
 	c.fallback = f
 }
 
-func (c *Client) Do(req *http.Request) (res *http.Response, err error) {
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	c.setRetrier()
-	var bodyReader *bytes.Reader
-	var resp interface{}
-	multiError := &MultiError{}
 
-	resp, err = c.breaker.Execute(func() (interface{}, error) {
-		if req.Body != nil {
-			reqData, err := io.ReadAll(req.Body)
-			if err != nil {
-				return nil, errors.Wrap(err, "io.ReadAll failed")
-			}
-
-			bodyReader = bytes.NewReader(reqData)
-			req.Body = io.NopCloser(bodyReader)
-		}
-
-		if c.breaker.IsCircuitBreakerOpen() {
-			return nil, errors.Wrap(errors.New("circuit breaker is open"), "circuit breaker")
-		}
-
-		for i := 0; i <= c.retryCount; i++ {
-			c.reportRequest(req)
-
-			resp, err = c.httpClient.Do(req)
-
-			if bodyReader != nil {
-				_, _ = bodyReader.Seek(0, 0)
-			}
-
-			if err != nil {
-				c.reportError(req, err)
-				multiError.Push(err.Error())
-				backoffTime := c.retrier.NextInterval(i)
-				time.Sleep(backoffTime)
-				continue
-			}
-
-			c.reportResponse(req, resp.(*http.Response))
-
-			if c.considerServerErrorAsFailure && resp.(*http.Response).StatusCode >= c.serverErrorThreshold {
-				multiError.Push(fmt.Sprintf("server error: %d", resp.(*http.Response).StatusCode))
-				backoffTime := c.retrier.NextInterval(i)
-				time.Sleep(backoffTime)
-				continue
-			}
-
-			multiError = &MultiError{}
-			break
-		}
-
-		return resp, multiError.HasError()
+	resp, err := c.breaker.Execute(func() (interface{}, error) {
+		return c.executeWithRetry(req)
 	})
 
 	if err != nil {
-		resp, errFallback := c.fallback()
-		if errFallback != nil {
-			return nil, errFallback
-		}
-
-		if resp == nil {
-			return nil, err
-		}
-
-		return resp, nil
+		return c.handleError(err)
 	}
 
 	return resp.(*http.Response), nil
+}
+
+func (c *Client) executeWithRetry(req *http.Request) (*http.Response, error) {
+	bodyReader, err := c.prepareRequestBody(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.breaker.IsCircuitBreakerOpen() {
+		return nil, errors.Wrap(errors.New("circuit breaker is open"), "circuit breaker")
+	}
+
+	var lastError error
+	for attempt := 0; attempt <= c.retryCount; attempt++ {
+		resp, err := c.performRequest(req, bodyReader)
+		if err == nil && !c.isServerError(resp) {
+			return resp, nil
+		}
+
+		lastError = c.handleRequestError(err)
+		if attempt < c.retryCount {
+			c.waitBeforeRetry(attempt)
+		}
+	}
+
+	return nil, lastError
+}
+
+func (c *Client) prepareRequestBody(req *http.Request) (*bytes.Reader, error) {
+	if req.Body == nil {
+		return nil, nil
+	}
+
+	reqData, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read request body")
+	}
+
+	bodyReader := bytes.NewReader(reqData)
+	req.Body = io.NopCloser(bodyReader)
+	return bodyReader, nil
+}
+
+func (c *Client) performRequest(req *http.Request, bodyReader *bytes.Reader) (*http.Response, error) {
+	c.reportRequest(req)
+
+	if bodyReader != nil {
+		_, _ = bodyReader.Seek(0, 0)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		c.reportError(req, err)
+		return nil, errors.Wrap(err, "failed to execute request")
+	}
+
+	c.reportResponse(req, resp)
+	return resp, nil
+}
+
+func (c *Client) isServerError(resp *http.Response) bool {
+	return c.considerServerErrorAsFailure && resp.StatusCode >= c.serverErrorThreshold
+}
+
+func (c *Client) handleRequestError(err error) error {
+	if err != nil {
+		return errors.Wrap(err, "request failed")
+	}
+	return errors.New("server error")
+}
+
+func (c *Client) waitBeforeRetry(attempt int) {
+	backoffTime := c.retrier.NextInterval(attempt)
+	time.Sleep(backoffTime)
+}
+
+func (c *Client) handleError(err error) (*http.Response, error) {
+	resp, errFallback := c.fallback()
+	if errFallback != nil {
+		return nil, errFallback
+	}
+
+	if resp == nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 func (c *Client) Get(ctx context.Context, path string, options ...barbarian.RequestOption) (res *http.Response, err error) {
